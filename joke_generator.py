@@ -1,7 +1,3 @@
-# =========================================
-# Fashion-MNIST using MLP - PyTorch
-# =========================================
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,194 +5,119 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
-# =========================================
-# 1) DATA
-# =========================================
-
+# -----------------------------
+# 1. Data Preparation
+# -----------------------------
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5,), (0.5,))
 ])
 
-train_data = datasets.FashionMNIST(
-    root="./data",
-    train=True,
-    download=True,
-    transform=transform
-)
+train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+test_dataset = datasets.MNIST(root='./data', train=False, transform=transform)
 
-test_data = datasets.FashionMNIST(
-    root="./data",
-    train=False,
-    download=True,
-    transform=transform
-)
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=64)
 
-train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=64)
-
-# =========================================
-# 2) MODEL
-# =========================================
-
+# -----------------------------
+# 2. Model (MLP)
+# -----------------------------
 class MLP(nn.Module):
-
-    def __init__(self, h1=128, h2=64):
+    def __init__(self, hidden_size=128, activation='relu'):
         super().__init__()
-
-        self.fc1 = nn.Linear(784, h1)
-        self.fc2 = nn.Linear(h1, h2)
-        self.fc3 = nn.Linear(h2, 10)
-
-        self.relu = nn.ReLU()
+        self.flatten = nn.Flatten()
+        
+        self.fc1 = nn.Linear(28*28, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 64)
+        self.fc3 = nn.Linear(64, 10)
+        
+        if activation == 'relu':
+            self.act = nn.ReLU()
+        else:
+            self.act = nn.Tanh()
 
     def forward(self, x):
-
-        x = x.view(-1, 784)
-
-        x = self.relu(self.fc1(x))
-        x = self.relu(self.fc2(x))
+        x = self.flatten(x)
+        x = self.act(self.fc1(x))
+        x = self.act(self.fc2(x))
         x = self.fc3(x)
-
         return x
 
-# =========================================
-# 3) TRAIN FUNCTION
-# =========================================
-
-def train(model, lr, epochs):
-
+# -----------------------------
+# 3. Training Function
+# -----------------------------
+def train_model(model, lr=0.001, epochs=5):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
-
-    losses = []
+    
+    train_losses = []
     accuracies = []
-
+    
     for epoch in range(epochs):
-
         total_loss = 0
         correct = 0
-        total = 0
-
+        
         for images, labels in train_loader:
-
             outputs = model(images)
-
             loss = criterion(outputs, labels)
-
+            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            
             total_loss += loss.item()
-
             _, predicted = torch.max(outputs, 1)
-
-            total += labels.size(0)
             correct += (predicted == labels).sum().item()
-
-        acc = 100 * correct / total
-        avg_loss = total_loss / len(train_loader)
-
-        losses.append(avg_loss)
+        
+        acc = correct / len(train_dataset)
+        train_losses.append(total_loss)
         accuracies.append(acc)
+        
+        print(f"Epoch {epoch+1}: Loss={total_loss:.4f}, Accuracy={acc:.4f}")
+    
+    return train_losses, accuracies
 
-        print(f"Epoch {epoch+1}")
-        print(f"Loss: {avg_loss:.4f}")
-        print(f"Accuracy: {acc:.2f}%")
-        print("---------------------")
-
-    return losses, accuracies
-
-# =========================================
-# 4) TEST FUNCTION
-# =========================================
-
-def test(model):
-
-    model.eval()
-
+# -----------------------------
+# 4. Evaluation
+# -----------------------------
+def evaluate(model):
     correct = 0
-    total = 0
-
+    
     with torch.no_grad():
-
         for images, labels in test_loader:
-
             outputs = model(images)
-
             _, predicted = torch.max(outputs, 1)
-
-            total += labels.size(0)
             correct += (predicted == labels).sum().item()
+    
+    acc = correct / len(test_dataset)
+    print(f"Test Accuracy: {acc:.4f}")
+    return acc
 
-    accuracy = 100 * correct / total
+# -----------------------------
+# 5. Experiment 1 (ReLU)
+# -----------------------------
+model1 = MLP(hidden_size=128, activation='relu')
+loss1, acc1 = train_model(model1)
+test_acc1 = evaluate(model1)
 
-    print(f"\nTest Accuracy = {accuracy:.2f}%")
+# -----------------------------
+# 6. Experiment 2 (Tanh)
+# -----------------------------
+model2 = MLP(hidden_size=128, activation='tanh')
+loss2, acc2 = train_model(model2)
+test_acc2 = evaluate(model2)
 
-    return accuracy
-
-# =========================================
-# 5) EXPERIMENT 1
-# =========================================
-
-print("\n===== Experiment 1 =====")
-
-model1 = MLP(h1=128, h2=64)
-
-loss1, acc1 = train(
-    model1,
-    lr=0.001,
-    epochs=10
-)
-
-test1 = test(model1)
-
-# =========================================
-# 6) EXPERIMENT 2
-# =========================================
-
-print("\n===== Experiment 2 =====")
-
-model2 = MLP(h1=256, h2=128)
-
-loss2, acc2 = train(
-    model2,
-    lr=0.0005,
-    epochs=10
-)
-
-test2 = test(model2)
-
-# =========================================
-# 7) RESULTS
-# =========================================
-
-print("\n===== FINAL RESULTS =====")
-
-print(f"Experiment 1 Accuracy: {test1:.2f}%")
-print(f"Experiment 2 Accuracy: {test2:.2f}%")
-
-# =========================================
-# 8) VISUALIZATION
-# =========================================
-
-# Loss Curve
-plt.plot(loss1, label="Exp 1")
-plt.plot(loss2, label="Exp 2")
-
-plt.title("Loss Curve")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
+# -----------------------------
+# 7. Visualization
+# -----------------------------
+plt.plot(loss1, label="ReLU Loss")
+plt.plot(loss2, label="Tanh Loss")
 plt.legend()
+plt.title("Loss Comparison")
 plt.show()
 
-# Accuracy Curve
-plt.plot(acc1, label="Exp 1")
-plt.plot(acc2, label="Exp 2")
-
-plt.title("Accuracy Curve")
-plt.xlabel("Epoch")
-plt.ylabel("Accuracy")
+plt.plot(acc1, label="ReLU Accuracy")
+plt.plot(acc2, label="Tanh Accuracy")
 plt.legend()
+plt.title("Accuracy Comparison")
 plt.show()
